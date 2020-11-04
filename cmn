@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+
+# CMN - ComMaNd
+# Workspace command bash script
+# 
+# ESSENTIAL FEATURE
+# 1. Git
+# Checkout specific branch of all git project
+# Pull master branch of all git project
+# Clean git project
+# Check file history
+# 
+# 2. Maven
+# Run test
+# Run install
+#
+# INSTALLATION
+# For Windows
+# 1. Put this script to %USERPROFILE%\bin
+# 2. Modify WORKSPACE_DIR, ENGINE_DIR and ECLUDES
+#
+# For Git Credential, run: git config --global credential.helper store
+#
+
+WORKSPACE_DIR=/c/work/Workspace
+ENGINE_DIR=C:\\work\\AxonIvyEngine7.0.11.1903290958_All_x64
+ECLUDES="(^\*|dev|addons|entity|mobile|test|calculator|logging|logger|mock|axonivyportal|crdhway|mortgage|cob_axon_fintech_resources)"
+
+declare -a BUILD=(
+                 "cob_portal_style"
+                 "cob_portal_kit"
+                 "cob_portal_template"
+                 "ivy_test_runner"
+                 "guiframework"
+                 "cob_portalcustomization"
+                 "cob_standard"
+                 "cob_basic_component"
+                 "individualch"
+                 "desk_individual"
+                 "desk_individual_customer1"
+                 )
+
+declare -a COB=(
+               "cob_portal_style"
+               "cob_portal_kit"
+               "cob_portal_template"
+               "guiframework"
+               "cob_portalcustomization"
+               "cob_standard"
+               "cob_basic_component"
+               "individualch"
+               "desk_individual"
+               "desk_individual_customer1"
+               )
+declare -A TAGS=(
+               ["cob_portal_style"]="7.00.23.04"
+               ["cob_portal_kit"]="7.00.24.04"
+               ["cob_portal_template"]="7.00.25.05"
+               ["guiframework"]="1.00.18.00-COB5"
+               ["cob_portalcustomization"]="0.07.45.05"
+               ["cob_standard"]="0.07.55.10"
+               ["cob_basic_component"]="0.07.55.08"
+               ["individualch"]="0.07.55.10"
+               ["desk_individual"]="0.07.55.10"
+               ["desk_individual_customer1"]="0.07.37.12"
+               )
+run() {
+    case "$1" in
+        log)
+            [[ $2 == "-f" && -d .git ]] && (find . -xdev -name $3 | xargs gitk) || echo "Not a git repository"
+            exit 0
+            ;;
+        clean)
+            if [[ -d .git ]]; then
+                [[ -z "$2" ]] && (git branch --merged | egrep -v "(^\*|master|dev)" | xargs git branch -d)
+                [[ $2 == "-r" ]] && (git branch -r --merged | egrep -v "(^\*|master|dev)" | xargs git branch -dr)
+            else
+                echo "Not a git repository"
+            fi
+            exit 0
+            ;;
+        sync)
+            cd $WORKSPACE_DIR
+            modules=$(find . -type d -name .git | egrep -v $ECLUDES)
+            each "$modules" $1 "git pull"
+            exit 0
+            ;;
+        checkout)
+            cd $WORKSPACE_DIR
+            modules=$(find . -type d -name .git | egrep -v $ECLUDES)
+            each "$modules" $1 "git checkout $2"
+            exit 0
+            ;;
+        install)
+            mvn clean install -DforkCount=3 -DthreadCount=6 -Dmaven.test.failure.ignore=true -DskipTests=true -DskipITs=true -P swiss_repo, -Dengine.path=$ENGINE_DIR $@
+            exit 0
+            ;;
+        test)
+            mvn clean test -DforkCount=3 -DthreadCount=6 -Dmaven.test.failure.ignore=false -DskipTests=false -DskipITs=false -P swiss_repo, -Dengine.path=$ENGINE_DIR $@
+            exit 0
+            ;;
+        prune)
+            cd $WORKSPACE_DIR
+            modules=$(find . -type d -name .git)
+            each "$modules" $1 "git fetch --prune origin \"+refs/tags/*:refs/tags/*\""
+            exit 0
+            ;;
+        cob)
+            cob $@
+            exit 0
+            ;;
+        mock)
+            mock $@
+            exit 0
+            ;;
+        status)
+            cd $WORKSPACE_DIR
+            modules=$(find . -type d -name .git | egrep -v $ECLUDES)
+            each "$modules" $1 "git status"
+            exit 0
+            ;;
+        build)
+            cd $WORKSPACE_DIR
+            modules=$(find . -type d -name .git | egrep -v $ECLUDES)
+            each "$modules" $1 "cmn install"
+            exit 0
+            ;;
+        *)
+            help
+    esac
+}
+
+init() {
+    printf "This utility will walk you through creating a setting.json file.\n"
+    printf "Press ^C at any time to quit.\n"
+    
+    read -p "bin: " bin
+    read -p "workspace: " workspace
+    read -p "engine: " engine
+
+    jq -n \
+       --arg bin "$bin" \
+       --arg workspace "$workspace" \
+       --arg engine "$engine" \
+       '{bin: $bin, workspace: $workspace, engine: $engine}' > setting.json
+
+    printf "%s" "About to write to " $bin "\setting.json"
+    printf "\n"
+    cat setting.json
+
+}
+
+message() {
+    printf "\033[1;32m[${1^^}] PROJECT -\033[0m\033[0m \033[1;36m${PWD^^}\033[0m\n"
+}
+
+each() {
+    for i in $1
+    do
+        if [[ $i =~ \.git$ ]]; then
+            cd $WORKSPACE_DIR/$i/..
+        else
+            cd $WORKSPACE_DIR/$i/
+        fi
+        message $2
+        $3
+    done
+}
+
+cob() {
+    modules=${COB[@]}
+    case "$2" in
+        status)
+            each "$modules" $2 "git status"
+            exit 0
+            ;;
+        sync)
+            each "$modules" $2 "git pull"
+            exit 0
+            ;;
+        checkout)
+            each "$modules" $2 "git checkout $3 $4"
+            exit 0
+            ;;
+        merge)
+            each "$modules" $2 "git merge $3"
+            exit 0
+            ;;
+        branch)
+            each "$modules" $2 "git branch $3 $4"
+            exit 0
+            ;;
+        push)
+            each "$modules" $2 "git push $3 $4 $5"
+            exit 0
+            ;;
+        build)
+            cd $WORKSPACE_DIR/${BUILD:0}
+            message $2
+            cmn clean install -Ppostfinance
+            modules=${BUILD[@]:1}
+            each "$modules" $2 "cmn install -DskipTests"
+            exit 0
+            ;;
+        tags)
+            for i in ${!TAGS[@]}
+            do
+                cd $WORKSPACE_DIR/$i/
+                message $2
+                git checkout tags/${TAGS[$i]}
+            done
+            exit 0
+            ;;
+        *)
+            help
+    esac
+}
+
+mock() {
+    case "$2" in
+        start)
+            cd $WORKSPACE_DIR/services_mock_customer1/sandbox-tail
+            forever start index.js --port 9004 log/debug.log -s sandbox-lib -x 9003
+            exit 0
+            ;;
+        stop)
+            forever stopall
+            netstat -aon | findstr 9003 | awk '{print $5}' | tail -1 | while read pid; do taskkill //F //PID ${pid}; done;
+            exit 0
+            ;;
+        log)
+            tail -f $WORKSPACE_DIR/services_mock_customer1/sandbox-tail/log/debug.log
+            exit 0
+            ;;
+        *)
+            help
+    esac
+}
+
+help() {
+    echo "usage: cmn [action] [option]"
+    echo "       [action]: log | clean | sync"
+    echo "       [option]: -r | -f"
+    echo "----------------------------------------------------"
+    echo "example: cmn log -f DateUtils.java"
+    echo "         cmn clean"
+    echo "         cmn clean -r"
+    echo "         cmn sync"
+    exit 1
+}
+
+while :
+do
+    case "$1" in
+    -h | --help)
+        help
+        exit 0
+        ;;
+    *)
+        run $@
+        exit 0
+        ;;
+    esac
+done
